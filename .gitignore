@@ -1,0 +1,13 @@
+.envrc
+.project
+.pyproject
+.classpath
+.settings/
+.gradle/
+.idea/
+.vscode/
+bin/
+build/
+dist/
+*.swp
+.antProperties.xml

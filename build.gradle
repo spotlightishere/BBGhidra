@@ -1,0 +1,54 @@
+// Builds a Ghidra Extension for a given Ghidra installation.
+//
+// An absolute path to the Ghidra installation directory must be supplied either by setting the 
+// GHIDRA_INSTALL_DIR environment variable or Gradle project property:
+//
+//     > export GHIDRA_INSTALL_DIR=<Absolute path to Ghidra> 
+//     > gradle
+//
+//         or
+//
+//     > gradle -PGHIDRA_INSTALL_DIR=<Absolute path to Ghidra>
+//
+// Gradle should be invoked from the directory of the project to build.  Please see the
+// application.gradle.version property in <GHIDRA_INSTALL_DIR>/Ghidra/application.properties
+// for the correction version of Gradle to use for the Ghidra installation you specify.
+
+plugins {
+	id 'java'
+	id 'idea'
+	id "com.diffplug.spotless" version "8.1.0"
+}
+
+// Make sure we can find a Ghidra installation.
+// If not, we'll throw an error.
+def ghidraInstallDir = providers.environmentVariable("GHIDRA_INSTALL_DIR")
+		.orElse(providers.gradleProperty("GHIDRA_INSTALL_DIR"))
+		.orNull
+
+if (ghidraInstallDir == null) {
+	throw new GradleException("Please set GHIDRA_INSTALL_DIR to your Ghidra installation path!")
+}
+
+// Import Ghidra's extension building and libraries.
+apply from: new File(ghidraInstallDir).getCanonicalPath() + "/support/buildExtension.gradle"
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// Any external dependencies added here will automatically be copied to the lib/ directory when
+	// this extension is built.
+}
+
+java {
+	targetCompatibility = 21
+}
+
+spotless {
+	java {
+		palantirJavaFormat('2.83.0')
+			.formatJavadoc(true)
+	}
+}
