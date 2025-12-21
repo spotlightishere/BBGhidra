@@ -4,10 +4,12 @@ import ghidra.app.util.bin.ByteProvider;
 import ghidra.app.util.opinion.AbstractProgramWrapperLoader;
 import ghidra.app.util.opinion.LoadSpec;
 import ghidra.app.util.opinion.LoaderTier;
+import ghidra.program.model.lang.LanguageCompilerSpecPair;
 import ghidra.program.model.listing.Program;
 import ghidra.util.exception.CancelledException;
 import java.io.IOException;
 import java.util.*;
+import space.joscomputing.BBGhidra.formats.SFIHeader;
 
 public class SFILoader extends AbstractProgramWrapperLoader {
     @Override
@@ -19,8 +21,13 @@ public class SFILoader extends AbstractProgramWrapperLoader {
     public Collection<LoadSpec> findSupportedLoadSpecs(ByteProvider provider) throws IOException {
         List<LoadSpec> loadSpecs = new ArrayList<>();
 
-        // Examine the bytes in 'provider' to determine if this loader can load it.  If it
-        // can load it, return the appropriate load specifications.
+        // Validate our SFI header. If it seems acceptable,
+        // we'll parse the OS and app headers within load.
+        if (SFIHeader.isValidHeader(provider)) {
+            // TODO(spotlightishere): The baseband is ARMv4t, whereas main app processor is ARMv6t.
+            // We should probably split the files into two segments.
+            loadSpecs.add(new LoadSpec(this, 0, new LanguageCompilerSpecPair("ARM:LE:32:v6", "default"), true));
+        }
 
         return loadSpecs;
     }
@@ -28,6 +35,7 @@ public class SFILoader extends AbstractProgramWrapperLoader {
     @Override
     protected void load(Program program, ImporterSettings settings) throws CancelledException, IOException {
         // Load the bytes from 'settings.provider()' into the 'program'.
+
     }
 
     @Override
