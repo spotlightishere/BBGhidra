@@ -16,6 +16,7 @@ import ghidra.util.exception.CancelledException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
+import space.joscomputing.BBGhidra.formats.MappedLZMAReader;
 import space.joscomputing.BBGhidra.formats.SFIHeader;
 
 public class SFILoader extends AbstractProgramWrapperLoader {
@@ -91,6 +92,11 @@ public class SFILoader extends AbstractProgramWrapperLoader {
                 true,
                 null,
                 settings.monitor());
+
+        // Unpack our LZMA-compressed segments.
+        MappedLZMAReader reader = new MappedLZMAReader(provider, program, settings);
+        reader.readSegment(header.getModemOffset(), header.getModemSize(), "modem");
+        reader.readSegment(header.getL4Offset(), header.getL4Size(), "L4");
     }
 
     @Override

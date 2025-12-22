@@ -30,6 +30,12 @@ public class SFIHeader {
     private final long appBaseAddress;
     private final long appSize;
 
+    private final long modemOffset;
+    private final long modemSize;
+
+    private final long l4Offset;
+    private final long l4Size;
+
     /**
      * Determines whether the given SFI header is valid.
      *
@@ -105,7 +111,7 @@ public class SFIHeader {
                 SFI_HEADER_LENGTH + SFI_OS_HEADER_SIZE + osBinarySize + SFI_APP_IMAGE_MAIN_OFFSET;
         final long appMainAddress = reader.readUnsignedInt(appMainAddressOffset);
 
-        // We adjust OS size to match from its start to before address' beginning.
+        // We adjust OS size to match from its start to before address's beginning.
         this.osSize = appMainAddress - osBaseAddress;
 
         // Finally, we must adjust the offset to adapt for our SFI's header length.
@@ -119,6 +125,13 @@ public class SFIHeader {
         this.appBaseAddress = reader.readNextUnsignedInt();
         long appEndAddress = reader.readNextUnsignedInt();
         this.appSize = appEndAddress - appBaseAddress;
+
+        // TODO(spotlightishere): Properly calculate offsets based on SFI_SIGNATURE_MAGIC
+        // For right now, implementing decompression is more important.
+        this.modemOffset = 0x6F2BBAL;
+        this.modemSize = 8238400;
+        this.l4Offset = 0xF7A98EL;
+        this.l4Size = 5100286;
     }
 
     public long getOsImageOffset() {
@@ -143,5 +156,21 @@ public class SFIHeader {
 
     public long getAppBaseAddress() {
         return appBaseAddress;
+    }
+
+    public long getModemOffset() {
+        return modemOffset;
+    }
+
+    public long getModemSize() {
+        return modemSize;
+    }
+
+    public long getL4Offset() {
+        return l4Offset;
+    }
+
+    public long getL4Size() {
+        return l4Size;
     }
 }
