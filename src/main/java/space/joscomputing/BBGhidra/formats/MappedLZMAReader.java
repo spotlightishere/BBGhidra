@@ -49,11 +49,6 @@ public class MappedLZMAReader {
             int tag = reader.readNextUnsignedShort();
             long baseAddress = reader.readNextUnsignedInt();
 
-            // TODO(spotlightishere): I am so sorry
-            if (baseAddress == 0x175469BC) {
-                continue;
-            }
-
             if (needsChunk) {
                 chunkAddress = baseAddress;
                 needsChunk = false;
@@ -75,29 +70,37 @@ public class MappedLZMAReader {
             byte[] streamContents = reader.readNextByteArray(streamSize);
             chunkStream.write(streamContents);
 
-            // TODO: lol
+            // If the alignment size is zero, this is probably mapped memory.
+            // TODO(spotlightishere): Implement
             if (alignSize == 0) {
-                // Why?
                 continue;
             }
 
+            // The alignment size of 6 (as used within L4) appears to truly be 4.
+            // (Perhaps this indicates something other than alignment?)
             if (alignSize == 6) {
                 alignSize = 4;
             }
 
+            // We may need to fix up the size difference for some streams.
             int sizeDifference = streamSize % alignSize;
-            if (sizeDifference == 3 || sizeDifference == 5) {
+            if (sizeDifference == 3) {
                 sizeDifference = -1;
             }
 
-            // TODO: lol 2.0
-            if (streamSize == 0x1856) {
-                sizeDifference = -10;
-            }
 
             if (sizeDifference != 0) {
+                System.out.println(-sizeDifference);
                 long currentPos = reader.getPointerIndex();
-                reader.setPointerIndex(currentPos - sizeDifference);
+                reader.setPointerIndex(currentPos + (-sizeDifference));
+            }
+
+            // Temporarily skip modem segment 4.
+            if (segmentNameBase.equals("modem") && baseAddress == 0x00107FE0) {
+                segmentIndex += 1;
+                chunkStream = new ByteArrayOutputStream();
+                needsChunk = true;
+                continue;
             }
 
             // TODO: This is hacky. We should find other ways.
@@ -125,11 +128,6 @@ public class MappedLZMAReader {
                         monitor);
 
                 segmentIndex += 1;
-
-                if (segmentNameBase.equals("modem") && segmentIndex == 4) {
-                    // :(
-                    return;
-                }
 
                 // Reset state.
                 chunkStream = new ByteArrayOutputStream();
