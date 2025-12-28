@@ -13,6 +13,7 @@ import ghidra.util.task.TaskMonitor;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import org.tukaani.xz.ArrayCache;
 import org.tukaani.xz.LZMAInputStream;
 
 public class MappedLZMAReader {
@@ -71,13 +72,14 @@ public class MappedLZMAReader {
 
             // Read our stream data.
             byte[] streamContents = reader.readNextByteArray(streamSize);
-            chunkStream.write(streamContents);
 
             // If the alignment size is zero, this is probably mapped memory.
             // TODO(spotlightishere): Implement
             if (alignSize == 0) {
                 continue;
             }
+
+            chunkStream.write(streamContents);
 
             // The alignment size of 6 (as used within L4) appears to truly be 4.
             // (Perhaps this indicates something other than alignment?)
@@ -96,37 +98,33 @@ public class MappedLZMAReader {
                 reader.setPointerIndex(currentPos + (-sizeDifference));
             }
 
-            // Temporarily skip modem segment 4.
-            if (segmentNameBase.equals("modem") && baseAddress == 0x00107FE0) {
-                segmentIndex += 1;
-                chunkStream = new ByteArrayOutputStream();
-                needsChunk = true;
-                continue;
-            }
-
             // TODO: This is hacky. We should find other ways.
             if (streamSize != 0x4000 && streamSize != 0x3FF0) {
-                byte[] fullStream = chunkStream.toByteArray();
-                ByteArrayInputStream inputStream = new ByteArrayInputStream(fullStream);
+                byte[] inputBytes = chunkStream.toByteArray();
 
-                LZMAInputStream decompressStream = new LZMAInputStream(inputStream);
-                decompressStream.enableRelaxedEndCondition();
+                // Refer to `createLzmaStream` on why we do not directly create an `LZMAInputStream`.
+                try (ByteArrayInputStream inputStream = new ByteArrayInputStream(inputBytes);
+                        LZMAInputStream lzmaStream = createLzmaStream(inputStream)) {
+                    // Fully decompress the LZMA stream.
+                    byte[] decompressed = lzmaStream.readAllBytes();
+                    ByteArrayInputStream decompressedStream = new ByteArrayInputStream(decompressed);
 
-                Address startingAddress = addressSpace.getAddress(chunkAddress);
-                MemoryBlockUtils.createInitializedBlock(
-                        program,
-                        false,
-                        String.format("%s_%d", segmentNameBase, segmentIndex),
-                        startingAddress,
-                        decompressStream,
-                        fullStream.length,
-                        "",
-                        null,
-                        true,
-                        true,
-                        true,
-                        logger,
-                        monitor);
+                    Address startingAddress = addressSpace.getAddress(chunkAddress);
+                    MemoryBlockUtils.createInitializedBlock(
+                            program,
+                            false,
+                            String.format("%s_%d", segmentNameBase, segmentIndex),
+                            startingAddress,
+                            decompressedStream,
+                            decompressed.length,
+                            "",
+                            null,
+                            true,
+                            true,
+                            true,
+                            logger,
+                            monitor);
+                }
 
                 segmentIndex += 1;
 
@@ -135,5 +133,40 @@ public class MappedLZMAReader {
                 needsChunk = true;
             }
         }
+    }
+
+    /**
+     * The streams embedded within this format are LZMA1, also known as "LZMA Alone". Within its 13-byte header, a
+     * 64-bit uncompressed size exists. <br>
+     * Unlike the normal LZMA file format, these streams use those 8 bytes to store their compressed and uncompressed
+     * size as 32-bit fields.
+     *
+     * @param inputStream The raw LZMA input in LZMA1 ("LZMA Alone") format.
+     * @return The custom input stream reader with a correct size.
+     */
+    LZMAInputStream createLzmaStream(ByteArrayInputStream inputStream) throws IOException {
+        // This is more or less an edit of the default LZMAInputStream constructor.
+        // We leverage Ghidra's ByteProvider for ease.
+        //
+        // First, read our properties byte (lc, lp, and pb).
+        byte propsByte = (byte) inputStream.read();
+
+        // Our dictionary size is an unsigned 32-bit little endian integer.
+        int dictSize = 0;
+        for (int i = 0; i < 4; ++i) dictSize |= inputStream.read() << (8 * i);
+
+        // Here begins our modifications. Our next value is our compressed
+        // size as a 32-bit little endian integer.
+        // We have no way to compare against this, so we'll simply read past it.
+        inputStream.skipNBytes(4);
+
+        // Next, we have our uncompressed size as a 32-bit little endian integer.
+        long uncompSize = 0;
+        for (int i = 0; i < 4; ++i) uncompSize |= (long) inputStream.read() << (8 * i);
+
+        // Create a default ArrayCache for use.
+        ArrayCache cache = ArrayCache.getDefaultCache();
+
+        return new LZMAInputStream(inputStream, uncompSize, propsByte, dictSize, null, cache);
     }
 }
