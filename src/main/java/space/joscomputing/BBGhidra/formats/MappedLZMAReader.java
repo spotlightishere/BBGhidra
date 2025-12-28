@@ -3,6 +3,7 @@ package space.joscomputing.BBGhidra.formats;
 import ghidra.app.util.MemoryBlockUtils;
 import ghidra.app.util.bin.BinaryReader;
 import ghidra.app.util.bin.ByteProvider;
+import ghidra.app.util.importer.MessageLog;
 import ghidra.app.util.opinion.Loader;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressOverflowException;
@@ -17,10 +18,11 @@ import org.tukaani.xz.LZMAInputStream;
 public class MappedLZMAReader {
     private static final int SEGMENT_HEADER_LENGTH = 12;
 
-    private AddressSpace addressSpace;
-    private ByteProvider provider;
-    private Program program;
-    private TaskMonitor monitor;
+    private final AddressSpace addressSpace;
+    private final ByteProvider provider;
+    private final Program program;
+    private final TaskMonitor monitor;
+    private final MessageLog logger;
 
     /** Creates a new MappedLZMAReader for this program. * */
     public MappedLZMAReader(ByteProvider provider, Program program, Loader.ImporterSettings settings) {
@@ -28,6 +30,7 @@ public class MappedLZMAReader {
         this.provider = provider;
         this.program = program;
         this.monitor = settings.monitor();
+        this.logger = settings.log();
     }
 
     public void readSegment(long segmentAddress, long segmentLength, String segmentNameBase)
@@ -88,9 +91,7 @@ public class MappedLZMAReader {
                 sizeDifference = -1;
             }
 
-
             if (sizeDifference != 0) {
-                System.out.println(-sizeDifference);
                 long currentPos = reader.getPointerIndex();
                 reader.setPointerIndex(currentPos + (-sizeDifference));
             }
@@ -124,7 +125,7 @@ public class MappedLZMAReader {
                         true,
                         true,
                         true,
-                        null,
+                        logger,
                         monitor);
 
                 segmentIndex += 1;
