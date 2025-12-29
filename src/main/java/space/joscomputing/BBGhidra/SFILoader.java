@@ -2,6 +2,7 @@ package space.joscomputing.BBGhidra;
 
 import ghidra.app.util.MemoryBlockUtils;
 import ghidra.app.util.bin.ByteProvider;
+import ghidra.app.util.importer.MessageLog;
 import ghidra.app.util.opinion.AbstractProgramWrapperLoader;
 import ghidra.app.util.opinion.LoadException;
 import ghidra.app.util.opinion.LoadSpec;
@@ -13,10 +14,12 @@ import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.LanguageCompilerSpecPair;
 import ghidra.program.model.listing.Program;
 import ghidra.util.exception.CancelledException;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import space.joscomputing.BBGhidra.formats.MappedLZMAReader;
+import space.joscomputing.BBGhidra.formats.MappedSection;
 import space.joscomputing.BBGhidra.formats.SFIHeader;
 
 public class SFILoader extends AbstractProgramWrapperLoader {
@@ -53,6 +56,7 @@ public class SFILoader extends AbstractProgramWrapperLoader {
             throws IOException, AddressOverflowException, LockException {
         SFIHeader header = new SFIHeader(provider);
         AddressSpace addressSpace = program.getAddressFactory().getDefaultAddressSpace();
+        MessageLog log = settings.log();
 
         // First, import OS as-is.
         // OS will always be our base address.
@@ -72,7 +76,7 @@ public class SFILoader extends AbstractProgramWrapperLoader {
                 true,
                 true,
                 true,
-                null,
+                log,
                 settings.monitor());
 
         // Similarly, import app as-is.
@@ -90,13 +94,33 @@ public class SFILoader extends AbstractProgramWrapperLoader {
                 true,
                 true,
                 true,
-                null,
+                log,
                 settings.monitor());
 
-        // Unpack our LZMA-compressed segments.
-        MappedLZMAReader reader = new MappedLZMAReader(provider, program, settings);
-        reader.readSegment(header.getModemOffset(), header.getModemSize(), "modem");
-        reader.readSegment(header.getL4Offset(), header.getL4Size(), "L4");
+        // Parse and unpack our LZMA-compressed segments.
+        MappedLZMAReader l4Mapping = new MappedLZMAReader(provider, header.getL4Offset(), header.getL4Size());
+        l4Mapping.readMapping();
+        for (MappedSection section : l4Mapping.getSections()) {
+            // These are all app-oriented, but we'll call them L4 for now.
+            Address baseAddress = addressSpace.getAddress(section.getCompressedBaseAddress());
+            byte[] sectionContents = section.decompress();
+            String segmentName = String.format("app_%x", section.getCompressedBaseAddress());
+
+            MemoryBlockUtils.createInitializedBlock(
+                    program,
+                    false,
+                    segmentName,
+                    baseAddress,
+                    new ByteArrayInputStream(sectionContents),
+                    sectionContents.length,
+                    "",
+                    null,
+                    true,
+                    true,
+                    true,
+                    log,
+                    settings.monitor());
+        }
     }
 
     @Override
