@@ -3,6 +3,7 @@ package space.joscomputing.BBGhidra.formats;
 import ghidra.app.util.bin.BinaryReader;
 import ghidra.app.util.bin.ByteProvider;
 import java.io.IOException;
+import space.joscomputing.BBGhidra.helpers.SegmentInfo;
 
 public class SFIHeader {
     private static final long SFI_MAGIC = 0x59AB797DL;
@@ -138,24 +139,16 @@ public class SFIHeader {
         return osImageOffset;
     }
 
-    public long getOsSize() {
-        return osSize;
-    }
-
-    public long getOsBaseAddress() {
-        return osBaseAddress;
+    public SegmentInfo getOsSegmentInfo() {
+        return new SegmentInfo(osBaseAddress, osSize, "os");
     }
 
     public long getAppImageOffset() {
         return appImageOffset;
     }
 
-    public long getAppSize() {
-        return appSize;
-    }
-
-    public long getAppBaseAddress() {
-        return appBaseAddress;
+    public SegmentInfo getAppSegmentInfo() {
+        return new SegmentInfo(appBaseAddress, appSize, "app");
     }
 
     public long getModemOffset() {

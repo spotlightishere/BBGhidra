@@ -43,7 +43,7 @@ public class MappedSection {
      *
      * @return The custom input stream reader with a correct size.
      */
-    public LZMAInputStream getLzmaStream() throws IOException {
+    private LZMAInputStream getLzmaStream() throws IOException {
         // This is more or less an edit of the default LZMAInputStream constructor.
         byte[] totalCompressed = contents.toByteArray();
         ByteArrayInputStream inputStream = new ByteArrayInputStream(totalCompressed);
