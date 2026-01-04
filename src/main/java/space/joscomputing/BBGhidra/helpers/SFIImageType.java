@@ -3,9 +3,9 @@ package space.joscomputing.BBGhidra.helpers;
 /** Distinct image components within an SFI. */
 public enum SFIImageType {
     /** Modem firmware, running on an ARMv4t core. */
-    MODEM("Modem", "ARM:LE:32:v4"),
+    MODEM("Modem", "ARM:LE:32:v4t"),
 
-    /** Application/OEM firmware, running on an ARMv6t core. */
+    /** Application/OEM firmware, running on an ARMv6 core. */
     APP("App", "ARM:LE:32:v6");
 
     private final String displayName;
