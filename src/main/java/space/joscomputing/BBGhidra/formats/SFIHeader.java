@@ -7,7 +7,7 @@ import space.joscomputing.BBGhidra.helpers.SegmentInfo;
 
 public class SFIHeader {
     private static final long SFI_MAGIC = 0x59AB797DL;
-    private static final long SFI_HEADER_LENGTH = 20;
+    public static final long SFI_HEADER_LENGTH = 20;
 
     /** Minimum observed SFI format version. * */
     private static final int SFI_VERSION_MIN = 0x10000;
@@ -69,23 +69,39 @@ public class SFIHeader {
     }
 
     /**
-     * Parses the SFI header alongside image layouts within.
+     * Skips over the SFI header and determines image layouts within.
      *
      * @param provider The program to read from.
      * @throws IOException Should the format not match.
      */
     public SFIHeader(ByteProvider provider) throws IOException {
+        // TODO(spotlightishere): This is a hack.
+        // It should be restructured so that SFIHeader does not determine all layout.
+        this(provider, SFI_HEADER_LENGTH);
+    }
+
+    /**
+     * Begins at the given offset and determines image layouts within a SFI.
+     *
+     * @param provider The program to read from.
+     * @param startingOffset The starting offset to begin reading at.
+     * @throws IOException Should the format not match.
+     */
+    public SFIHeader(ByteProvider provider, long startingOffset) throws IOException {
         BinaryReader reader = new BinaryReader(provider, true);
 
+        // TODO(spotlightishere): startingOffset is a hack.
+        // It should be restructured so that SFIHeader does not determine all layout.
+        //
         // Within our SFI header, we have fields like version information.
         // Our OS image contains its magic bytes beyond its ARMv6 reset vectors.
         // Mark the true offset, but skip beyond this header.
         //
         // This is:
-        // - 20 bytes for header
+        // - `startingOffset` bytes for format header (likely 20, see SFI_OS_HEADER_SIZE)
         // - 4 bytes for (possibly?) image count
         // - 28 bytes for ARMv6 reset vectors
-        this.osImageOffset = SFI_HEADER_LENGTH;
+        this.osImageOffset = startingOffset;
         reader.setPointerIndex(osImageOffset + 4 + 28);
 
         // TODO(spotlightishere): There may be multiple magic values for images.
@@ -103,20 +119,20 @@ public class SFIHeader {
         // reading the info block proceeding its signature.
         //
         // In our file, that's:
-        // (20 bytes for SFI) + (20 for OS image header) + osSize.
+        // (`startingOffset` bytes for SFI) + (20 for OS image header) + osSize.
         //
         // Within our signature block, we can read the main application's
         // address. Its address is present 116 bytes in.
         final long osBinarySize = osEndAddress - osBaseAddress;
         final long appMainAddressOffset =
-                SFI_HEADER_LENGTH + SFI_OS_HEADER_SIZE + osBinarySize + SFI_APP_IMAGE_MAIN_OFFSET;
+                startingOffset + SFI_OS_HEADER_SIZE + osBinarySize + SFI_APP_IMAGE_MAIN_OFFSET;
         final long appMainAddress = reader.readUnsignedInt(appMainAddressOffset);
 
         // We adjust OS size to match from its start to before address's beginning.
         this.osSize = appMainAddress - osBaseAddress;
 
         // Finally, we must adjust the offset to adapt for our SFI's header length.
-        this.appImageOffset = SFI_HEADER_LENGTH + appMainAddress - osBaseAddress;
+        this.appImageOffset = startingOffset + appMainAddress - osBaseAddress;
         reader.setPointerIndex(appImageOffset);
 
         long appHeaderMagic = reader.readNextUnsignedInt();
