@@ -14,6 +14,7 @@ import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.LanguageCompilerSpecPair;
 import ghidra.program.model.listing.Program;
 import ghidra.util.exception.CancelledException;
+import ghidra.util.task.TaskMonitor;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,22 +37,20 @@ public class SFILoader extends AbstractProgramWrapperLoader {
     private SFIImageType determineImageType(ByteProvider provider) throws IOException {
         // The following is adapted from discussion over getting FileAttributes from the underlying FS:
         // https://github.com/NationalSecurityAgency/ghidra/discussions/7355#discussioncomment-11803754.
-        //
-        // We want to make certain that we're loading from our custom file system.
-        String filesystemType = provider.getFSRL().getFS().getProtocol();
-        if (!filesystemType.equals(SFIFileSystem.FS_TYPE)) {
-            // This is not our file system.
-            return null;
-        }
-
-        // We then look up our file within our custom file system to obtain its attributes.
         try (RefdFile rf = FileSystemService.getInstance().getRefdFile(provider.getFSRL(), null)) {
+            // We want to make certain that we're loading from our custom file system.
             GFileSystem currentFs = rf.fsRef.getFilesystem();
+            String filesystemType = currentFs.getType();
+            if (!filesystemType.equals(SFIFileSystem.FS_TYPE)) {
+                // This is not our file system.
+                return null;
+            }
 
+            // We then look up our file within our custom file system to obtain its attributes.
             // Attempt to get the exact SFIImageType from FS-specific attributes.
             // Note that this may be null.
             return currentFs
-                    .getFileAttributes(rf.file, null)
+                    .getFileAttributes(rf.file, TaskMonitor.DUMMY)
                     .get(FileAttributeType.UNKNOWN_ATTRIBUTE, SFIImageType.class, null);
         } catch (CancelledException e) {
             // We have no need to rethrow CancelledException.
@@ -88,10 +87,10 @@ public class SFILoader extends AbstractProgramWrapperLoader {
 
     private void loadForReal(ByteProvider provider, Program program, ImporterSettings settings)
             throws IOException, AddressOverflowException, LockException {
+
         AddressSpace addressSpace = program.getAddressFactory().getDefaultAddressSpace();
         MemoryHelper helper = new MemoryHelper(program, settings);
 
-        // First, attempt to determine this image's type via the underlying file system.
         SFIImageType imageType = determineImageType(provider);
         if (imageType == null) {
             // We can't handle loading this file.
