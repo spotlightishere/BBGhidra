@@ -78,7 +78,8 @@ public class SFILoader extends AbstractProgramWrapperLoader {
 
     @Override
     protected void load(Program program, ImporterSettings settings) throws IOException {
-        try (ByteProvider provider = settings.provider()) {
+        try {
+            ByteProvider provider = settings.provider();
             loadForReal(provider, program, settings);
         } catch (IOException | AddressOverflowException | LockException e) {
             throw new LoadException(e);
