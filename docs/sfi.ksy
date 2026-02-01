@@ -2,7 +2,7 @@ meta:
   id: sfi
   file-extension: sfi
   endian: le
-  encoding: ascii
+  encoding: ASCII
 
 seq:
   - id: magic
@@ -18,6 +18,11 @@ seq:
   - id: total_length
     type: u4
     doc: The length of this entire segment, including header.
+  - id: identifier
+    type: u4
+    doc: |-
+      TODO: What _does_ this mean?
+      This appears to vary between BlackBerries.
   - id: version
     type: version
   - id: contents
@@ -45,24 +50,23 @@ types:
   # Generic #
   ###########
 
-  # Shared across OS and app images.
-  image_header:
+  os_image_header:
     seq:
-      - id: identifier
-        doc: |-
-          TODO: What _does_ this mean?
-          This appears to vary between BlackBerries.
+      - id: base_addr
         type: u4
-      - id: code_start
+      - id: build_info_addr
         type: u4
-      - id: code_end
-        type: u4
-
 
   # TODO: There's a lot more information here!
   # We only implement what we need.
-  image_info:
+  os_image_info:
     seq:
+      - id: first_addr
+        type: u4
+      - id: second_addr
+        type: u4
+      - id: heap_end_addr
+        type: u4
       - id: build_user
         type: strz
         size: 16
@@ -79,34 +83,83 @@ types:
         type: u4
       - id: version
         type: version
-      - id: unknown
-        type: u4
-      - id: app_main_addr
-        type: u4
 
   ############
   # OS Image #
   ############
+  # This refers to the stub OS image present
+  # at the start of the SFI, and not the
+  # full, uncompressed underlying Qualcomm app OS.
   os_image_contents:
     seq:
       - id: header
-        type: image_header
+        type: os_image_header
       - id: code
         # Code is end - start - header size
-        size: header.code_end - header.code_start - 24
-      - id: info
-        type: image_info
-        # TODO: Hardcoded around info
-      - id: padding
-        size: info.app_main_addr - header.code_end - 20 - 120
+        size: header.build_info_addr - header.base_addr - 20 - 20 - 8
+      - id: whole_length
+        type: u4
+      - id: info_version
+        type: u4
+        doc: Not entirely certain this is true.
+      - id: info_length
+        type: u4
+      - id: os_info
+        type: os_image_info
+
+      # TODO: This segment seems to contain a lot of
+      # information regarding memory layout, and versions.
+      #
+      # We are interested in one value: our compressed loader offset.
+      - id: skipped_fields
+        type: u4
+        repeat: expr
+        repeat-expr: 19
+
+      - id: loader_addr
+        type: u4
+      - id: loader_length_maybe
+        type: u4
+
+      # We're skipping over the remainder currently as layout
+      # appears volatile across OS versions with no clear pattern.
+      #
+      # Repeat until we encounter the app image magic, 0x1F2DCCD7.
+      - id: ignored_fields
+        type: u4
+        repeat: until
+        repeat-until: _ == 3620482335
+
+
+  app_image_header:
+    seq:
+      - id: base_addr
+        type: u4
+      - id: build_info_addr
+        type: u4
+      - id: loader_addr
+        type: u4
+
+  app_image_info:
+    seq:
+      - id: info_version
+        type: u4
 
   app_image_contents:
     seq:
       - id: header
-        type: image_header
+        type: app_image_header
       - id: code
         # Code is end - start - header size
-        size: header.code_end - header.code_start - 24
+        # We use the base address from our OS segment, which
+        # should theoretically be 0x10000000.
+        size: header.loader_addr - header.base_addr - 12
+      - id: segment_length_maybe
+        type: u4
+        # TODO: This appears to extend beyond both images.
+        # Something else may be required.
+      - id: segment_contents
+        size: segment_length_maybe
 
   version:
     doc: -|
