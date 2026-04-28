@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import space.joscomputing.BBGhidra.formats.BootInfoMetadata;
-import space.joscomputing.BBGhidra.formats.MappedLZMAReader;
+import space.joscomputing.BBGhidra.formats.MappedChunkReader;
 import space.joscomputing.BBGhidra.formats.MappedSection;
 import space.joscomputing.BBGhidra.formats.SFIHeader;
 import space.joscomputing.BBGhidra.helpers.MemoryHelper;
@@ -80,7 +80,7 @@ public class SFILoader extends AbstractProgramWrapperLoader {
         try {
             ByteProvider provider = settings.provider();
             loadForReal(provider, program, settings);
-        } catch (IOException | AddressOverflowException | LockException e) {
+        } catch (AddressOverflowException | LockException e) {
             throw new LoadException(e);
         }
     }
@@ -98,11 +98,9 @@ public class SFILoader extends AbstractProgramWrapperLoader {
         }
 
         long compressedOffset = 0;
-        long compressedSize = 0;
 
         if (imageType == SFIImageType.MODEM) {
-            // Our underlying provider contains our full contents.
-            compressedSize = provider.length();
+            throw new IOException("TOOD: Fix up modem");
         } else if (imageType == SFIImageType.APP) {
             // If this is an app image, we need to first import
             // the BlackBerry OS and app image.
@@ -128,26 +126,25 @@ public class SFILoader extends AbstractProgramWrapperLoader {
             helper.createInitializedBlock(header.getAppSegmentInfo(), appImage);
 
             // Finally, forward the L4 offset and size metadata.
-            compressedOffset = header.getL4Offset() - SFIHeader.SFI_HEADER_LENGTH;
-            compressedSize = header.getL4Size();
+            compressedOffset = header.getCompressedOffset() - SFIHeader.SFI_HEADER_LENGTH;
         }
 
         // Parse and unpack our LZMA-compressed segments.
-        MappedLZMAReader compressedMapping = new MappedLZMAReader(provider, compressedOffset, compressedSize);
-        compressedMapping.readMapping();
+        MappedChunkReader compressedMapping = new MappedChunkReader(provider, compressedOffset);
+        ArrayList<MappedSection> sections = compressedMapping.parseMappings();
 
         // TODO: Probably create uninitialized blocks,
         // but boot info might also match?
         //
         // The last segment in our LZMA-compressed segments is okL4's BootInfo.
         // We parse this to obtain segment names and other mappings (e.g. heap).
-        MappedSection lastSection = compressedMapping.getSections().getLast();
+        MappedSection lastSection = sections.getLast();
         BootInfoMetadata metadata = new BootInfoMetadata(lastSection.decompress());
         HashMap<Long, SegmentInfo> metadataSegments = metadata.parseEntries();
 
         // For all compressed sections, get the corresponding segment metadata.
-        for (MappedSection section : compressedMapping.getSections()) {
-            long baseAddress = section.getCompressedBaseAddress();
+        for (MappedSection section : sections) {
+            long baseAddress = section.getBaseAddress();
             SegmentInfo current = metadataSegments.get(baseAddress);
 
             String segmentName;
@@ -161,9 +158,16 @@ public class SFILoader extends AbstractProgramWrapperLoader {
                 segmentName = current.segmentName();
             }
 
-            byte[] decompressed = section.decompress();
-            SegmentInfo modified = new SegmentInfo(baseAddress, decompressed.length, segmentName);
-            helper.createInitializedBlock(modified, new ByteArrayInputStream(decompressed));
+            // Obtain this segment's payload.
+            byte[] payload = section.getContents();
+            SegmentInfo modified = new SegmentInfo(baseAddress, payload.length, segmentName);
+
+            if (section.isUninitialized()) {
+                // The size of our payload represents the size of our uninitialized data.
+                helper.createUninitializedBlock(modified);
+            } else {
+                helper.createInitializedBlock(modified, new ByteArrayInputStream(payload));
+            }
 
             metadataSegments.remove(baseAddress);
         }

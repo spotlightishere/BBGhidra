@@ -2,37 +2,68 @@ package space.joscomputing.BBGhidra.formats;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
-import java.util.ArrayList;
 import org.tukaani.xz.ArrayCache;
 import org.tukaani.xz.LZMAInputStream;
 
-/** A distinct range of chunks within a logical segment in a LZMA mapping. */
+/** A distinct range of chunks within a logical sequence. */
 public class MappedSection {
-    /** Any chunk, whether uninitialized, or compressed. */
-    private record MappedChunk(long loadAddress, long segmentSize) {}
+    /** A stream of compressed contents, ready for consumption. */
+    private final ByteArrayOutputStream lzmaContents = new ByteArrayOutputStream();
 
-    private final ArrayList<MappedChunk> uninitialized = new ArrayList<>();
-    private Long compressedBaseAddress;
-    private final ByteArrayOutputStream contents = new ByteArrayOutputStream();
+    /** Our raw contents of this section, proceeding LZMA content. */
+    private final ByteArrayOutputStream rawContents = new ByteArrayOutputStream();
 
-    public void addUninitializedChunk(long loadAddress, long chunkSize) {
-        MappedChunk current = new MappedChunk(loadAddress, chunkSize);
-        uninitialized.add(current);
+    /** The base address of this section. */
+    private final long baseAddress;
+
+    /** The type of this section, corresponding to {@link RawChunkFlags}. */
+    private final int sectionType;
+
+    /** Whether this section should be interpreted as unmapped. */
+    private final boolean isUninitialized;
+
+    /** Creates metadata for a mapped section based off the first available chunk. */
+    public MappedSection(RawChunk firstChunk) {
+        // Determine our type based on the first chunk available.
+        sectionType = firstChunk.sectionType();
+        baseAddress = firstChunk.loadAddress();
+        isUninitialized = firstChunk.isUninitialized();
     }
 
-    public void addCompressedChunk(long loadAddress, byte[] payload) throws IOException {
-        // TODO: We don't retain information about compressed chunks.
-        // We (perhaps naively) assume that all compressed chunks are sequential.
-        if (compressedBaseAddress == null) {
-            compressedBaseAddress = loadAddress;
+    public void addChunk(RawChunk chunk) throws IOException {
+        // Ensure other chunks are also this type.
+        boolean isSection = (chunk.flags() & sectionType) == sectionType;
+        if (!isSection) {
+            throw new IOException("Inconsistent chunk type in sequence!");
         }
 
-        contents.write(payload);
+        if (chunk.isUninitialized() && lzmaContents.size() != 0) {
+            // We should never have an uninitialized chunk present within a compressed section.
+            throw new IOException("Uninitialized chunk type in compressed section!");
+        }
+
+        if (chunk.isCompressed() && this.isUninitialized) {
+            // Similarly, no compressed chunks should be present in an unmapped section.
+            throw new IOException("Compressed chunk type in uninitialized sequence!");
+        }
+
+        if (chunk.isCompressed()) {
+            lzmaContents.writeBytes(chunk.payload());
+        } else {
+            rawContents.writeBytes(chunk.payload());
+        }
     }
 
-    public long getCompressedBaseAddress() {
-        return compressedBaseAddress;
+    /** Returns the base mapping address for this section. */
+    public long getBaseAddress() {
+        return this.baseAddress;
+    }
+
+    /** Returns whether this represents an uninitialized section. */
+    public boolean isUninitialized() {
+        return this.isUninitialized;
     }
 
     /**
@@ -45,7 +76,7 @@ public class MappedSection {
      */
     private LZMAInputStream getLzmaStream() throws IOException {
         // This is more or less an edit of the default LZMAInputStream constructor.
-        byte[] totalCompressed = contents.toByteArray();
+        byte[] totalCompressed = lzmaContents.toByteArray();
         ByteArrayInputStream inputStream = new ByteArrayInputStream(totalCompressed);
 
         // First, read our properties byte (lc, lp, and pb).
@@ -57,8 +88,8 @@ public class MappedSection {
 
         // Here begins our modifications. Our next value is our compressed
         // size as a 32-bit little endian integer.
-        // We have no way to compare against this, so we'll simply read past it.
-        inputStream.skipNBytes(4);
+        int compressedSize = 0;
+        for (int i = 0; i < 4; ++i) compressedSize |= inputStream.read() << (8 * i);
 
         // Next, we have our uncompressed size as a 32-bit little endian integer.
         long uncompSize = 0;
@@ -72,8 +103,38 @@ public class MappedSection {
 
     /** Decompresses the internal LZMA stream. */
     public byte[] decompress() throws IOException {
-        try (LZMAInputStream inputStream = this.getLzmaStream()) {
-            return inputStream.readAllBytes();
+        if (lzmaContents.toByteArray().length == 0) {
+            return new byte[] {};
         }
+
+        // TODO: This is a hack due to some LZMA chunks
+        // not having full LZMA data present.
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+
+        try (LZMAInputStream inputStream = this.getLzmaStream()) {
+            while (true) {
+                int result = inputStream.read();
+                if (result < 0) {
+                    // We've exhausted our input stream.
+                    break;
+                }
+                stream.write(result);
+            }
+            return stream.toByteArray();
+        } catch (EOFException e) {
+            // Return what we can.
+            return stream.toByteArray();
+        }
+    }
+
+    /** Returns the entire contents of this mapped section. * */
+    public byte[] getContents() throws IOException {
+        ByteArrayOutputStream totalContents = new ByteArrayOutputStream();
+        // First, write raw contents.
+        totalContents.writeBytes(rawContents.toByteArray());
+        // Secondly, write decompressed contents.
+        byte[] decompressed = this.decompress();
+        totalContents.writeBytes(decompressed);
+        return totalContents.toByteArray();
     }
 }

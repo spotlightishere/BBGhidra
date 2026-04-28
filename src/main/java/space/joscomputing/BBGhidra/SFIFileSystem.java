@@ -50,16 +50,18 @@ public class SFIFileSystem implements GFileSystem {
 
     /** Helper to get the file size for an image type. */
     private long getImageSize(SFIImageType imageType) {
-        return switch (imageType) {
-            case APP ->
-                // This size is technically incorrect, but this works well enough for now.
-                header.getAppSegmentInfo().blockSize()
-                        + header.getOsSegmentInfo().blockSize()
-                        + header.getL4Size();
-            case MODEM ->
-                // Our modem image is more straightforward.
-                header.getModemSize();
-        };
+        // TODO
+        return 1;
+        //        return switch (imageType) {
+        //            case APP ->
+        //                // This size is technically incorrect, but this works well enough for now.
+        //                header.getAppSegmentInfo().blockSize()
+        //                        + header.getOsSegmentInfo().blockSize()
+        //                        + header.co();
+        //            case MODEM ->
+        //                // Our modem image is more straightforward.
+        //                header.getModemSize();
+        //        };
     }
 
     /**
@@ -144,7 +146,9 @@ public class SFIFileSystem implements GFileSystem {
                         file.getFSRL());
             case SFIImageType.MODEM ->
                 // For modem, we have a contiguous block that can be parsed.
-                new ByteProviderWrapper(provider, header.getModemOffset(), header.getModemSize(), file.getFSRL());
+                //                new ByteProviderWrapper(provider, header.getModemOffset(), header.getModemSize(),
+                // file.getFSRL());
+                throw new IOException("TODO: Fix up modem");
         };
     }
 

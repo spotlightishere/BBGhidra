@@ -31,11 +31,7 @@ public class SFIHeader {
     private final long appBaseAddress;
     private final long appSize;
 
-    private final long modemOffset;
-    private final long modemSize;
-
-    private final long l4Offset;
-    private final long l4Size;
+    private final long compressedOffset;
 
     /**
      * Determines whether the given SFI header is valid.
@@ -145,10 +141,7 @@ public class SFIHeader {
 
         // TODO(spotlightishere): Properly calculate offsets based on SFI_SIGNATURE_MAGIC
         // For right now, implementing decompression is more important.
-        this.modemOffset = 0x6F2BBAL;
-        this.modemSize = 8238400;
-        this.l4Offset = 0xF7A98EL;
-        this.l4Size = 5100286;
+        this.compressedOffset = 0x6F09FC;
     }
 
     public long getOsImageOffset() {
@@ -167,19 +160,7 @@ public class SFIHeader {
         return new SegmentInfo(appBaseAddress, appSize, "app");
     }
 
-    public long getModemOffset() {
-        return modemOffset;
-    }
-
-    public long getModemSize() {
-        return modemSize;
-    }
-
-    public long getL4Offset() {
-        return l4Offset;
-    }
-
-    public long getL4Size() {
-        return l4Size;
+    public long getCompressedOffset() {
+        return compressedOffset;
     }
 }
