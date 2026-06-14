@@ -146,9 +146,11 @@ public class SFIFileSystem implements GFileSystem {
                         file.getFSRL());
             case SFIImageType.MODEM ->
                 // For modem, we have a contiguous block that can be parsed.
-                //                new ByteProviderWrapper(provider, header.getModemOffset(), header.getModemSize(),
-                // file.getFSRL());
-                throw new IOException("TODO: Fix up modem");
+                new ByteProviderWrapper(
+                        provider,
+                        SFIHeader.SFI_HEADER_LENGTH,
+                        provider.length() - SFIHeader.SFI_HEADER_LENGTH,
+                        file.getFSRL());
         };
     }
 

@@ -66,6 +66,21 @@ public class MappedSection {
         return this.isUninitialized;
     }
 
+    /** Returns whether this is app data. */
+    public boolean isAppData() {
+        return (sectionType & RawChunkFlags.APP_DATA) == RawChunkFlags.APP_DATA;
+    }
+
+    /** Returns whether this is modem data. */
+    public boolean isOSData() {
+        return (sectionType & RawChunkFlags.OS_DATA) == RawChunkFlags.OS_DATA;
+    }
+
+    /** Returns whether this is modem data. */
+    public boolean isModemData() {
+        return (sectionType & RawChunkFlags.MODEM_DATA) == RawChunkFlags.MODEM_DATA;
+    }
+
     /**
      * The streams embedded within this format are LZMA1, also known as "LZMA Alone". Within its 13-byte header, a
      * 64-bit uncompressed size exists. <br>
