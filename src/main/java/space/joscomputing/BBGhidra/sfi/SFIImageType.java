@@ -1,4 +1,4 @@
-package space.joscomputing.BBGhidra.helpers;
+package space.joscomputing.BBGhidra.sfi;
 
 /** Distinct image components within an SFI. */
 public enum SFIImageType {

@@ -22,10 +22,11 @@ import java.util.*;
 import space.joscomputing.BBGhidra.formats.BootInfoMetadata;
 import space.joscomputing.BBGhidra.formats.MappedChunkReader;
 import space.joscomputing.BBGhidra.formats.MappedSection;
-import space.joscomputing.BBGhidra.formats.SFIHeader;
 import space.joscomputing.BBGhidra.helpers.MemoryHelper;
-import space.joscomputing.BBGhidra.helpers.SFIImageType;
 import space.joscomputing.BBGhidra.helpers.SegmentInfo;
+import space.joscomputing.BBGhidra.sfi.SFIFileSystem;
+import space.joscomputing.BBGhidra.sfi.SFIHeader;
+import space.joscomputing.BBGhidra.sfi.SFIImageType;
 
 @SuppressWarnings("unused")
 public class SFILoader extends AbstractProgramWrapperLoader {
@@ -102,11 +103,7 @@ public class SFILoader extends AbstractProgramWrapperLoader {
 
         // Please note that the BlackBerry app image exists outside
         // the Qualcomm app image, which is within the compressed LZMA data.
-        //
-        // Our contents skip over the actual SFI format header,
-        // so we begin at offset zero.
-        SFIHeader header = new SFIHeader(provider, 0L);
-
+        SFIHeader header = new SFIHeader(provider);
         if (imageType == SFIImageType.APP) {
             // First, import OS as-is.
             // OS will always be our base address.
@@ -114,16 +111,16 @@ public class SFILoader extends AbstractProgramWrapperLoader {
             Address osBaseAddress = addressSpace.getAddress(osInfo.blockAddress());
             program.setImageBase(osBaseAddress, true);
 
-            InputStream osImage = provider.getInputStream(header.getOsImageOffset());
+            InputStream osImage = provider.getInputStream(header.getOsOffset());
             helper.createInitializedBlock(header.getOsSegmentInfo(), osImage);
 
             // Next, import app as-is.
-            InputStream appImage = provider.getInputStream(header.getAppImageOffset());
+            InputStream appImage = provider.getInputStream(header.getAppOffset());
             helper.createInitializedBlock(header.getAppSegmentInfo(), appImage);
         }
 
         // Forward the L4 offset and size metadata.
-        compressedOffset = header.getCompressedOffset() - SFIHeader.SFI_HEADER_LENGTH;
+        compressedOffset = header.getCompressedOffset();
 
         // Parse and unpack our LZMA-compressed segments.
         MappedChunkReader compressedMapping = new MappedChunkReader(provider, compressedOffset);

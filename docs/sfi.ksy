@@ -18,11 +18,6 @@ seq:
   - id: total_length
     type: u4
     doc: The length of this entire segment, including header.
-  - id: identifier
-    type: u4
-    doc: |-
-      TODO: What _does_ this mean?
-      This appears to vary between BlackBerries.
   - id: version
     type: version
   - id: contents
@@ -39,8 +34,6 @@ types:
       - id: armv6_vectors
         type: armv6_vectors
         doc: Standard exception vectors.
-      - id: image_count_maybe
-        type: u4
       - id: os_image
         type: os_image_contents
       - id: app_image
@@ -58,12 +51,15 @@ types:
         type: u4
 
   # TODO: There's a lot more information here!
-  # We only implement what we need.
   os_image_info:
     seq:
-      - id: first_addr
+      - id: metrics_version
+        type: version_hi_lo
+      - id: unknown
         type: u4
-      - id: second_addr
+      - id: os_addr_unknown
+        type: u4
+      - id: os_addr_unknown2
         type: u4
       - id: heap_end_addr
         type: u4
@@ -81,8 +77,23 @@ types:
         size: 64
       - id: device_identifier
         type: u4
-      - id: version
+      - id: build_version
         type: version
+      - id: iram_address
+        type: u4
+      - id: app_image_addr
+        type: u4
+
+      # TODO: This segment seems to contain a lot of
+      # information regarding memory layout, and versions.
+      #
+      # We are interested in one value: our compressed loader offset.
+      - id: skipped_fields
+        type: u4
+        repeat: expr
+        repeat-expr: 17
+      - id: loader_addr
+        type: u4
 
   ############
   # OS Image #
@@ -92,44 +103,21 @@ types:
   # full, uncompressed underlying Qualcomm app OS.
   os_image_contents:
     seq:
+      # 0x1f2da8d7
+      - id: identifier
+        type: u4
       - id: header
         type: os_image_header
       - id: code
         # Code is end - start - header size
-        size: header.build_info_addr - header.base_addr - 20 - 20 - 8
-      - id: whole_length
-        type: u4
-      - id: info_version
-        type: u4
-        doc: Not entirely certain this is true.
-      - id: info_length
-        type: u4
+        # TODO: Why 40? Is that correct?
+        size: header.build_info_addr - header.base_addr - 20 - 20 - 4
       - id: os_info
         type: os_image_info
-
-      # TODO: This segment seems to contain a lot of
-      # information regarding memory layout, and versions.
-      #
-      # We are interested in one value: our compressed loader offset.
-      - id: skipped_fields
-        type: u4
-        repeat: expr
-        repeat-expr: 19
-
-      - id: loader_addr
-        type: u4
-      - id: loader_length_maybe
-        type: u4
-
-      # We're skipping over the remainder currently as layout
-      # appears volatile across OS versions with no clear pattern.
-      #
-      # Repeat until we encounter the app image magic, 0x1F2DCCD7.
-      - id: ignored_fields
-        type: u4
-        repeat: until
-        repeat-until: _ == 3620482335
-
+      # From here, we skip past all of this data until our app image.
+      # TODO: Avoiding +20 would be nice
+      - id: os_filler
+        size: os_info.app_image_addr - header.base_addr - _io.pos + 20
 
   app_image_header:
     seq:
@@ -140,26 +128,18 @@ types:
       - id: loader_addr
         type: u4
 
-  app_image_info:
-    seq:
-      - id: info_version
-        type: u4
-
   app_image_contents:
     seq:
+      # 0x1f2dccd7
+      - id: identifier
+        type: u4
       - id: header
         type: app_image_header
       - id: code
         # Code is end - start - header size
         # We use the base address from our OS segment, which
         # should theoretically be 0x10000000.
-        size: header.loader_addr - header.base_addr - 12
-      - id: segment_length_maybe
-        type: u4
-        # TODO: This appears to extend beyond both images.
-        # Something else may be required.
-      - id: segment_contents
-        size: segment_length_maybe
+        size: header.loader_addr - header.base_addr - 20
 
   version:
     doc: -|
@@ -173,6 +153,14 @@ types:
         type: u1
       - id: major_version
         type: u1
+
+  version_hi_lo:
+    doc: A version in form of x.y.
+    seq:
+      - id: minor_version
+        type: u2
+      - id: major_version
+        type: u2
 
   ############
   # Niceties #
@@ -193,6 +181,8 @@ types:
       - id: reserved
         type: u4
       - id: irq
+        type: u4
+      - id: fiq
         type: u4
 enums:
   image_file_type:
